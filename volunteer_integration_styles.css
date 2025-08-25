@@ -1,0 +1,70 @@
+/* Custom styles to match sevakaro.in theme */
+
+/* Use your website's color scheme */
+:root {
+    --primary-color: #ff6b35;    /* Adjust to match sevakaro.in */
+    --secondary-color: #2c3e50;
+    --accent-color: #3498db;
+}
+
+/* Header styling to match main website */
+.volunteer-header {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    padding: 2rem 0;
+    text-align: center;
+}
+
+.volunteer-header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.volunteer-header p {
+    font-size: 1.1rem;
+    opacity: 0.9;
+}
+
+/* Form styling */
+.volunteer-form {
+    max-width: 1000px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+}
+
+/* Button styling to match your donation buttons */
+.btn-volunteer {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 25px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-volunteer:hover {
+    background: var(--secondary-color);
+    transform: translateY(-2px);
+}
+
+/* Add your website's font family */
+body {
+    font-family: 'Your Website Font', Arial, sans-serif;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .volunteer-form {
+        margin: 1rem;
+        padding: 1rem;
+    }
+    
+    .volunteer-header h1 {
+        font-size: 2rem;
+    }
+}
+

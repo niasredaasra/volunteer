@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visitor Management</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .form-step {
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal-backdrop {
+            backdrop-filter: blur(4px);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // API utility functions
+        const api = {
+            checkMobile: async (mobile) => {
+                const response = await axios.get(`api/visitors.php?fn=check-mobile&mobile=${mobile}`);
+                return response.data;
+            },
+            
+            addVisitor: async (visitorData) => {
+                const formData = new FormData();
+                Object.keys(visitorData).forEach(key => {
+                    if (Array.isArray(visitorData[key])) {
+                        visitorData[key].forEach(item => formData.append(`${key}[]`, item));
+                    } else {
+                        formData.append(key, visitorData[key]);
+                    }
+                });
+                formData.append('fn', 'add-visitor');
+                
+                const response = await axios.post('api/visitors.php', formData);
+                return response.data;
+            },
+            
+            addVisit: async (mobile, visitData) => {
+                const formData = new FormData();
+                formData.append('mobile', mobile);
+                formData.append('fn', 'add-visit');
+                
+                if (visitData.items_brought) {
+                    visitData.items_brought.forEach(item => formData.append('items_brought[]', item));
+                }
+                formData.append('remarks', visitData.remarks || '');
+                
+                const response = await axios.post('api/visitors.php', formData);
+                return response.data;
+            },
+            
+            getVisitorHistory: async (mobile) => {
+                const response = await axios.get(`api/visitors.php?fn=get-history&mobile=${mobile}`);
+                return response.data;
+            },
+            
+            loadDropdownData: async (endpoint) => {
+                const response = await axios.get(endpoint);
+                return response.data;
+            }
+        };
+
+        // Modal Component
+        const Modal = ({ isOpen, onClose, children, title }) => {
+            if (!isOpen) return null;
+
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop bg-black bg-opacity-50">
+                    <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center p-6 border-b">
+                            <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
+                            <button 
+                                onClick={onClose}
+                                className="text-gray-500 hover:text-gray-700 text-2xl"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            {children}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Visitor Details Component
+        const VisitorDetails = ({ visitor, showDetails, onToggleDetails }) => {
+            return (
+                <div className="space-y-4">
+                    <button
+                        onClick={onToggleDetails}
+                        className="flex items-center justify-between w-full p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                    >
+                        <span className="font-medium text-blue-800">Show Visitor Details</span>
+                        <span className="text-blue-600">
+                            {showDetails ? '▼' : '▶'}
+                        </span>
+                    </button>
+                    
+                    {showDetails && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+                            <div><strong>Name:</strong> {visitor.name}</div>
+                            <div><strong>Mobile:</strong> {visitor.mobile}</div>
+                            <div><strong>Email:</strong> {visitor.email || 'N/A'}</div>
+                            <div><strong>Alt Phone:</strong> {visitor.phone || 'N/A'}</div>
+                            <div><strong>Village:</strong> {visitor.village_name || 'N/A'}</div>
+                            <div><strong>City:</strong> {visitor.city_name || 'N/A'}</div>
+                            <div><strong>State:</strong> {visitor.state_name || 'N/A'}</div>
+                            <div><strong>Country:</strong> {visitor.country_name || 'N/A'}</div>
+                            <div><strong>Occupation:</strong> {visitor.occupation_name || 'N/A'}</div>
+                            <div><strong>Interested Seva:</strong> {visitor.seva_name || 'N/A'}</div>
+                            <div><strong>DOB:</strong> {visitor.dob || 'N/A'}</div>
+                            <div><strong>Total Visits:</strong> {visitor.total_visits}</div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Visit History Component
+        const VisitHistory = ({ visits, showHistory, onToggleHistory }) => {
+            return (
+                <div className="space-y-4">
+                    <button
+                        onClick={onToggleHistory}
+                        className="flex items-center justify-between w-full p-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
+                    >
+                        <span className="font-medium text-green-800">Show Visit History ({visits.length} visits)</span>
+                        <span className="text-green-600">
+                            {showHistory ? '▼' : '▶'}
+                        </span>
+                    </button>
+                    
+                    {showHistory && (
+                        <div className="overflow-x-auto">
+                            <table className="w-full bg-white rounded-lg shadow overflow-hidden">
+                                <thead className="bg-gray-100">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left">Date-Time</th>
+                                        <th className="px-4 py-3 text-left">Items Brought</th>
+                                        <th className="px-4 py-3 text-left">Remarks</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {visits.map((visit, index) => (
+                                        <tr key={visit.id} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                                            <td className="px-4 py-3">{new Date(visit.visit_date).toLocaleString()}</td>
+                                            <td className="px-4 py-3">
+                                                {Array.isArray(visit.items_brought) && visit.items_brought.length > 0
+                                                    ? visit.items_brought.join(', ')
+                                                    : 'None'
+                                                }
+                                            </td>
+                                            <td className="px-4 py-3">{visit.remarks || 'No remarks'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Existing Visitor Modal Component
+        const ExistingVisitorModal = ({ isOpen, onClose, mobile, onVisitAdded }) => {
+            const [visitor, setVisitor] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [showDetails, setShowDetails] = useState(false);
+            const [showHistory, setShowHistory] = useState(false);
+            const [items, setItems] = useState([]);
+            const [visitForm, setVisitForm] = useState({
+                items_brought: [],
+                remarks: ''
+            });
+            const [submitting, setSubmitting] = useState(false);
+
+            useEffect(() => {
+                if (isOpen && mobile) {
+                    loadVisitorData();
+                    loadItems();
+                }
+            }, [isOpen, mobile]);
+
+            const loadVisitorData = async () => {
+                setLoading(true);
+                try {
+                    const response = await api.getVisitorHistory(mobile);
+                    if (response.ok) {
+                        setVisitor(response.visitor);
+                    }
+                } catch (error) {
+                    console.error('Error loading visitor data:', error);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const loadItems = async () => {
+                try {
+                    const data = await api.loadDropdownData('api/items.php?fn=list');
+                    setItems(Array.isArray(data) ? data : []);
+                } catch (error) {
+                    console.error('Error loading items:', error);
+                }
+            };
+
+            const handleSubmitVisit = async (e) => {
+                e.preventDefault();
+                setSubmitting(true);
+                
+                try {
+                    const response = await api.addVisit(mobile, visitForm);
+                    if (response.ok) {
+                        alert('Visit recorded successfully!');
+                        setVisitForm({ items_brought: [], remarks: '' });
+                        await loadVisitorData(); // Reload to show new visit
+                        if (onVisitAdded) onVisitAdded();
+                    } else {
+                        alert('Error: ' + response.error);
+                    }
+                } catch (error) {
+                    console.error('Error adding visit:', error);
+                    alert('Error recording visit');
+                } finally {
+                    setSubmitting(false);
+                }
+            };
+
+            const handleItemChange = (e) => {
+                const options = Array.from(e.target.selectedOptions, option => option.value);
+                setVisitForm({ ...visitForm, items_brought: options });
+            };
+
+            if (!isOpen) return null;
+
+            return (
+                <Modal isOpen={isOpen} onClose={onClose} title="Existing Visitor">
+                    {loading ? (
+                        <div className="text-center py-8">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                            <p className="mt-4 text-gray-600">Loading visitor data...</p>
+                        </div>
+                    ) : visitor ? (
+                        <div className="space-y-6">
+                            {/* Visitor Details Section */}
+                            <VisitorDetails 
+                                visitor={visitor} 
+                                showDetails={showDetails}
+                                onToggleDetails={() => setShowDetails(!showDetails)}
+                            />
+
+                            {/* Visit History Section */}
+                            <VisitHistory 
+                                visits={visitor.visits || []}
+                                showHistory={showHistory}
+                                onToggleHistory={() => setShowHistory(!showHistory)}
+                            />
+
+                            {/* New Visit Entry Section */}
+                            <div className="bg-blue-50 p-6 rounded-lg">
+                                <h3 className="text-lg font-semibold text-blue-800 mb-4">Record New Visit</h3>
+                                <form onSubmit={handleSubmitVisit} className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Items Brought
+                                        </label>
+                                        <select
+                                            multiple
+                                            value={visitForm.items_brought}
+                                            onChange={handleItemChange}
+                                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            size="4"
+                                        >
+                                            {items.map(item => (
+                                                <option key={item.id} value={item.item_name}>
+                                                    {item.item_name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p className="text-sm text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple items</p>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Remarks
+                                        </label>
+                                        <textarea
+                                            value={visitForm.remarks}
+                                            onChange={(e) => setVisitForm({ ...visitForm, remarks: e.target.value })}
+                                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            rows="3"
+                                            placeholder="Any notes about this visit..."
+                                        />
+                                    </div>
+
+                                    <div className="flex gap-3">
+                                        <button
+                                            type="submit"
+                                            disabled={submitting}
+                                            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {submitting ? 'Saving...' : 'Record Visit'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={onClose}
+                                            className="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600"
+                                        >
+                                            Close
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center py-8">
+                            <p className="text-red-600">Error loading visitor data</p>
+                        </div>
+                    )}
+                </Modal>
+            );
+        };
+
+        // Main Visitor Management Component
+        const VisitorManagement = () => {
+            const [mobile, setMobile] = useState('');
+            const [mobileChecked, setMobileChecked] = useState(false);
+            const [visitorExists, setVisitorExists] = useState(false);
+            const [checking, setChecking] = useState(false);
+            const [showForm, setShowForm] = useState(false);
+            const [showExistingModal, setShowExistingModal] = useState(false);
+            
+            // Dropdown data
+            const [villages, setVillages] = useState([]);
+            const [cities, setCities] = useState([]);
+            const [states, setStates] = useState([]);
+            const [countries, setCountries] = useState([]);
+            const [occupations, setOccupations] = useState([]);
+            const [sevaInterests, setSevaInterests] = useState([]);
+            const [items, setItems] = useState([]);
+            
+            // Form data
+            const [formData, setFormData] = useState({
+                name: '',
+                mobile: '',
+                email: '',
+                phone: '',
+                village_id: '',
+                city_id: '',
+                state_id: '',
+                country_id: '',
+                occupation_id: '',
+                seva_interest_id: '',
+                dob: '',
+                items_brought: [],
+                remarks: ''
+            });
+            
+            const [submitting, setSubmitting] = useState(false);
+
+            useEffect(() => {
+                loadDropdownData();
+            }, []);
+
+            const loadDropdownData = async () => {
+                try {
+                    const [villagesData, citiesData, statesData, countriesData, occupationsData, sevaData, itemsData] = await Promise.all([
+                        api.loadDropdownData('api/villages.php?fn=list'),
+                        api.loadDropdownData('api/cities.php?fn=list'),
+                        api.loadDropdownData('api/states.php?fn=list'),
+                        api.loadDropdownData('api/countries.php?fn=list'),
+                        api.loadDropdownData('api/occupations.php?fn=list'),
+                        api.loadDropdownData('api/seva_interests.php?fn=list'),
+                        api.loadDropdownData('api/items.php?fn=list')
+                    ]);
+
+                    setVillages(Array.isArray(villagesData) ? villagesData : []);
+                    setCities(Array.isArray(citiesData) ? citiesData : []);
+                    setStates(Array.isArray(statesData) ? statesData : []);
+                    setCountries(Array.isArray(countriesData) ? countriesData : []);
+                    setOccupations(Array.isArray(occupationsData) ? occupationsData : []);
+                    setSevaInterests(Array.isArray(sevaData) ? sevaData : []);
+                    setItems(Array.isArray(itemsData) ? itemsData : []);
+                } catch (error) {
+                    console.error('Error loading dropdown data:', error);
+                }
+            };
+
+            const handleMobileBlur = async () => {
+                if (!mobile || mobile.length < 10) return;
+                
+                setChecking(true);
+                try {
+                    const response = await api.checkMobile(mobile);
+                    setVisitorExists(response.exists);
+                    setMobileChecked(true);
+                    
+                    if (response.exists) {
+                        setShowExistingModal(true);
+                    } else {
+                        setShowForm(true);
+                        setFormData({ ...formData, mobile });
+                    }
+                } catch (error) {
+                    console.error('Error checking mobile:', error);
+                    alert('Error checking mobile number');
+                } finally {
+                    setChecking(false);
+                }
+            };
+
+            const handleFormSubmit = async (e) => {
+                e.preventDefault();
+                setSubmitting(true);
+                
+                try {
+                    const response = await api.addVisitor(formData);
+                    if (response.ok) {
+                        alert('Visitor registered successfully!');
+                        resetForm();
+                    } else {
+                        alert('Error: ' + response.error);
+                    }
+                } catch (error) {
+                    console.error('Error adding visitor:', error);
+                    alert('Error registering visitor');
+                } finally {
+                    setSubmitting(false);
+                }
+            };
+
+            const resetForm = () => {
+                setMobile('');
+                setMobileChecked(false);
+                setVisitorExists(false);
+                setShowForm(false);
+                setShowExistingModal(false);
+                setFormData({
+                    name: '',
+                    mobile: '',
+                    email: '',
+                    phone: '',
+                    village_id: '',
+                    city_id: '',
+                    state_id: '',
+                    country_id: '',
+                    occupation_id: '',
+                    seva_interest_id: '',
+                    dob: '',
+                    items_brought: [],
+                    remarks: ''
+                });
+            };
+
+            const handleItemChange = (e) => {
+                const options = Array.from(e.target.selectedOptions, option => option.value);
+                setFormData({ ...formData, items_brought: options });
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-50 py-8">
+                    <div className="max-w-4xl mx-auto px-4">
+                        <div className="bg-white rounded-lg shadow-lg p-8">
+                            <div className="flex justify-between items-center mb-8">
+                                <h1 className="text-3xl font-bold text-gray-800">Visitor Management</h1>
+                                <a 
+                                    href="index.php" 
+                                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                                >
+                                    Volunteer Registration
+                                </a>
+                            </div>
+
+                            {/* Mobile Number Input */}
+                            <div className="mb-8">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Mobile Number *
+                                </label>
+                                <input
+                                    type="tel"
+                                    value={mobile}
+                                    onChange={(e) => setMobile(e.target.value)}
+                                    onBlur={handleMobileBlur}
+                                    placeholder="Enter mobile number"
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    disabled={mobileChecked || checking}
+                                />
+                                {checking && (
+                                    <p className="mt-2 text-blue-600">Checking mobile number...</p>
+                                )}
+                                {mobileChecked && (
+                                    <div className="mt-2">
+                                        {visitorExists ? (
+                                            <p className="text-green-600">✓ Existing visitor found!</p>
+                                        ) : (
+                                            <p className="text-blue-600">✓ New visitor - please fill the form below</p>
+                                        )}
+                                        <button
+                                            onClick={resetForm}
+                                            className="mt-2 text-sm text-gray-500 hover:text-gray-700 underline"
+                                        >
+                                            Change mobile number
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* New Visitor Form */}
+                            {showForm && !visitorExists && (
+                                <div className="form-step">
+                                    <h2 className="text-xl font-semibold text-gray-800 mb-6">New Visitor Registration</h2>
+                                    <form onSubmit={handleFormSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Full Name *
+                                            </label>
+                                            <input
+                                                type="text"
+                                                required
+                                                value={formData.name}
+                                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Email
+                                            </label>
+                                            <input
+                                                type="email"
+                                                value={formData.email}
+                                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Phone (Alt)
+                                            </label>
+                                            <input
+                                                type="tel"
+                                                value={formData.phone}
+                                                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Village
+                                            </label>
+                                            <select
+                                                value={formData.village_id}
+                                                onChange={(e) => setFormData({ ...formData, village_id: e.target.value })}
+                                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                <option value="">-- Select Village --</option>
+                                                {villages.map(village => (
+                                                    <option key={village.id} value={village.id}>
+                                                        {village.village_name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                City
+                                            </label>
+                                            <select
+                                                value={formData.city_id}
+                                                onChange={(e) => setFormData({ ...formData, city_id: e.target.value })}
+                                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                <option value="">-- Select City --</option>
+                                                {cities.map(city => (
+                                                    <option key={city.id} value={city.id}>
+                                                        {city.city_name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                State
+                                            </label>
+                                            <select
+                                                value={formData.state_id}
+                                                onChange={(e) => setFormData({ ...formData, state_id: e.target.value })}
+                                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                <option value="">-- Select State --</option>
+                                                {states.map(state => (
+                                                    <option key={state.id} value={state.id}>
+                                                        {state.state_name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Country
+                                            </label>
+                                            <select
+                                                value={formData.country_id}
+                                                onChange={(e) => setFormData({ ...formData, country_id: e.target.value })}
+                                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                <option value="">-- Select Country --</option>
+                                                {countries.map(country => (
+                                                    <option key={country.id} value={country.id}>
+                                                        {country.country_name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Occupation
+                                            </label>
+                                            <select
+                                                value={formData.occupation_id}
+                                                onChange={(e) => setFormData({ ...formData, occupation_id: e.target.value })}
+                                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                <option value="">-- Select Occupation --</option>
+                                                {occupations.map(occupation => (
+                                                    <option key={occupation.id} value={occupation.id}>
+                                                        {occupation.occupation_name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Interested Seva
+                                            </label>
+                                            <select
+                                                value={formData.seva_interest_id}
+                                                onChange={(e) => setFormData({ ...formData, seva_interest_id: e.target.value })}
+                                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                <option value="">-- Select Seva --</option>
+                                                {sevaInterests.map(seva => (
+                                                    <option key={seva.id} value={seva.id}>
+                                                        {seva.seva_name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Date of Birth
+                                            </label>
+                                            <input
+                                                type="date"
+                                                value={formData.dob}
+                                                onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Items Brought
+                                            </label>
+                                            <select
+                                                multiple
+                                                value={formData.items_brought}
+                                                onChange={handleItemChange}
+                                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                size="4"
+                                            >
+                                                {items.map(item => (
+                                                    <option key={item.id} value={item.item_name}>
+                                                        {item.item_name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <p className="text-sm text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple items</p>
+                                        </div>
+
+                                        <div className="md:col-span-2">
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Remarks
+                                            </label>
+                                            <textarea
+                                                value={formData.remarks}
+                                                onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                rows="3"
+                                                placeholder="Any notes..."
+                                            />
+                                        </div>
+
+                                        <div className="md:col-span-2 flex gap-4">
+                                            <button
+                                                type="submit"
+                                                disabled={submitting}
+                                                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {submitting ? 'Saving...' : 'Save Visitor'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={resetForm}
+                                                className="bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600"
+                                            >
+                                                Reset
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            )}
+
+                            {/* Existing Visitor Modal */}
+                            <ExistingVisitorModal
+                                isOpen={showExistingModal}
+                                onClose={() => setShowExistingModal(false)}
+                                mobile={mobile}
+                                onVisitAdded={() => {
+                                    // Optionally refresh data or show success message
+                                }}
+                            />
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Render the app
+        ReactDOM.render(<VisitorManagement />, document.getElementById('root'));
+    </script>
+</body>
+</html>
+
+

@@ -106,3 +106,4 @@ UNION ALL SELECT
 UNION ALL SELECT 
     'volunteers' as table_name, COUNT(*) as records FROM volunteers;
 
+

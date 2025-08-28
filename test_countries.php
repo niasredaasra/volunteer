@@ -77,3 +77,4 @@ echo "<h3>API Test:</h3>";
 echo "<a href='api/countries.php?fn=list' target='_blank'>Test Countries API</a><br>";
 echo "<a href='index.php' target='_blank'>Back to Registration Form</a>";
 ?>
+

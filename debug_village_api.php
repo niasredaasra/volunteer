@@ -95,3 +95,4 @@ echo "✅ Village API should now work!<br>";
 echo "Try adding village from main form again.<br>";
 ?>
 
+

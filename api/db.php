@@ -15,8 +15,36 @@ function db() {
 }
 
 function json_response($data, $code = 200) {
-    header('Content-Type: application/json; charset=utf-8');
+    // Set environment-appropriate cache headers
+    $cache_headers = [
+        'Content-Type' => 'application/json; charset=utf-8'
+    ];
+    
+    if (defined('ENVIRONMENT') && ENVIRONMENT === 'HOSTINGER') {
+        $cache_headers['Cache-Control'] = 'public, max-age=300'; // 5 minutes cache in production
+    } else {
+        $cache_headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+        $cache_headers['Pragma'] = 'no-cache';
+        $cache_headers['Expires'] = '0';
+    }
+    
+    foreach ($cache_headers as $header => $value) {
+        header($header . ': ' . $value);
+    }
+    
     http_response_code($code);
+    
+    // Add environment info in debug mode
+    if (defined('DEBUG_MODE') && DEBUG_MODE) {
+        if (is_array($data)) {
+            $data['_debug'] = [
+                'environment' => ENVIRONMENT ?? 'UNKNOWN',
+                'timestamp' => date('Y-m-d H:i:s'),
+                'memory_usage' => memory_get_usage(true)
+            ];
+        }
+    }
+    
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
     exit;
 }

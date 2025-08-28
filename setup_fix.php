@@ -112,3 +112,4 @@ try {
     echo "Please check your database configuration in config.php";
 }
 ?>
+

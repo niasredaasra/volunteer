@@ -76,3 +76,4 @@ CREATE TABLE IF NOT EXISTS volunteers (
 -- Show success
 SELECT 'All tables created successfully!' as Status;
 
+

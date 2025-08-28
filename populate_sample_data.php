@@ -200,3 +200,4 @@ try {
     echo "<p>Please check your database configuration in config.php</p>";
 }
 ?>
+

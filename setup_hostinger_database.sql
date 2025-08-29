@@ -83,5 +83,50 @@ CREATE TABLE IF NOT EXISTS volunteers (
     FOREIGN KEY (seva_interest_id) REFERENCES seva_interests(id)
 );
 
+-- Visitors table (for visitor management)
+CREATE TABLE IF NOT EXISTS visitors (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    mobile VARCHAR(15) UNIQUE NOT NULL,
+    email VARCHAR(255),
+    phone VARCHAR(15) COMMENT 'Alternative phone number',
+    village_id INT,
+    city_id INT,
+    state_id INT,
+    country_id INT,
+    occupation_id INT,
+    seva_interest_id INT,
+    dob DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    -- Foreign key constraints
+    FOREIGN KEY (village_id) REFERENCES villages(id),
+    FOREIGN KEY (city_id) REFERENCES cities(id),
+    FOREIGN KEY (state_id) REFERENCES states(id),
+    FOREIGN KEY (country_id) REFERENCES countries(id),
+    FOREIGN KEY (occupation_id) REFERENCES occupations(id),
+    FOREIGN KEY (seva_interest_id) REFERENCES seva_interests(id),
+    
+    -- Index for mobile number lookup
+    INDEX idx_mobile (mobile)
+);
+
+-- Visitor visits table (for visit history tracking)
+CREATE TABLE IF NOT EXISTS visitor_visits (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    visitor_id INT NOT NULL,
+    items_brought TEXT COMMENT 'JSON string of items brought',
+    remarks TEXT,
+    visit_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Foreign key constraint
+    FOREIGN KEY (visitor_id) REFERENCES visitors(id) ON DELETE CASCADE,
+    
+    -- Index for visitor lookup
+    INDEX idx_visitor_id (visitor_id),
+    INDEX idx_visit_date (visit_date)
+);
+
 -- Show success message
 SELECT 'All tables created successfully! Ready for Hostinger deployment.' as Status;

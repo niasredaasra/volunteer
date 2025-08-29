@@ -42,24 +42,72 @@ if ($fn === 'add') {
         $check_stmt->close();
     }
 
-    // Insert with proper foreign key structure
-    $stmt = $conn->prepare("INSERT INTO volunteers 
-        (name, village_id, city_id, state_id, country_id, mobile, email, phone, occupation_id, seva_interest_id, dob, remarks, items_brought) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("siiiiissiisss", 
-        $name, $village_id, $city_id, $state_id, $country_id, 
-        $mobile, $email, $phone, $occupation_id, $seva_interest_id, $dob, $remarks, $items_brought
-    );
-    if (!$stmt->execute()) {
-        // Check if error is due to duplicate key constraint
-        if (strpos($stmt->error, 'unique_phone') !== false || strpos($stmt->error, 'Duplicate entry') !== false) {
-            json_response(['ok' => false, 'error' => 'This phone number is already registered. Please use a different phone number.'], 400);
+    // Begin transaction to ensure data consistency
+    $conn->begin_transaction();
+    
+    try {
+        // Insert volunteer record
+        $stmt = $conn->prepare("INSERT INTO volunteers 
+            (name, village_id, city_id, state_id, country_id, mobile, email, phone, occupation_id, seva_interest_id, dob, remarks, items_brought) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("siiiiissiisss", 
+            $name, $village_id, $city_id, $state_id, $country_id, 
+            $mobile, $email, $phone, $occupation_id, $seva_interest_id, $dob, $remarks, $items_brought
+        );
+        
+        if (!$stmt->execute()) {
+            // Check if error is due to duplicate key constraint
+            if (strpos($stmt->error, 'unique_phone') !== false || strpos($stmt->error, 'Duplicate entry') !== false) {
+                throw new Exception('This phone number is already registered. Please use a different phone number.');
+            }
+            throw new Exception('Failed to insert volunteer: ' . $stmt->error);
         }
-        json_response(['ok' => false, 'error' => 'Insert failed', 'details' => $stmt->error], 500);
+        
+        $volunteer_id = $stmt->insert_id;
+        $stmt->close();
+        
+        // Create corresponding visitor record
+        $stmt = $conn->prepare("INSERT INTO visitors 
+            (name, mobile, email, phone, village_id, city_id, state_id, country_id, occupation_id, seva_interest_id, dob) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("ssssiiiiiis", 
+            $name, $mobile, $email, $phone, $village_id, $city_id, $state_id, $country_id, 
+            $occupation_id, $seva_interest_id, $dob
+        );
+        
+        if (!$stmt->execute()) {
+            throw new Exception('Failed to create visitor record: ' . $stmt->error);
+        }
+        
+        $visitor_id = $stmt->insert_id;
+        $stmt->close();
+        
+        // Create initial visit record (since they're physically present during registration)
+        $stmt = $conn->prepare("INSERT INTO visitor_visits (visitor_id, items_brought, remarks) VALUES (?, ?, ?)");
+        $stmt->bind_param("iss", $visitor_id, $items_brought, $remarks);
+        
+        if (!$stmt->execute()) {
+            throw new Exception('Failed to create visit record: ' . $stmt->error);
+        }
+        
+        $visit_id = $stmt->insert_id;
+        $stmt->close();
+        
+        // Commit transaction
+        $conn->commit();
+        
+        json_response([
+            'ok' => true, 
+            'id' => $volunteer_id, 
+            'visitor_id' => $visitor_id, 
+            'visit_id' => $visit_id,
+            'message' => 'Volunteer registered and visit recorded successfully!'
+        ]);
+        
+    } catch (Exception $e) {
+        $conn->rollback();
+        json_response(['ok' => false, 'error' => $e->getMessage()], 500);
     }
-    $id = $stmt->insert_id;
-    $stmt->close();
-    json_response(['ok' => true, 'id' => $id]);
 
 } else if ($fn === 'list') {
     $res = $conn->query("

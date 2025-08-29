@@ -240,7 +240,53 @@ if ($fn === 'check-mobile') {
     $result = $stmt->get_result();
     
     if ($result->num_rows === 0) {
-        json_response(['ok' => false, 'error' => 'Visitor not found'], 404);
+        // Check if this mobile exists in volunteers table
+        $stmt = $conn->prepare("
+            SELECT vol.id, vol.name, vol.mobile, vol.email, vol.phone, vol.dob,
+                   vg.village_name, vc.city_name, vst.state_name, vco.country_name,
+                   vo.occupation_name, vs.seva_name, vol.created_at as registered_at
+            FROM volunteers vol
+            LEFT JOIN villages vg ON vol.village_id = vg.id
+            LEFT JOIN cities vc ON vol.city_id = vc.id
+            LEFT JOIN states vst ON vol.state_id = vst.id
+            LEFT JOIN countries vco ON vol.country_id = vco.id
+            LEFT JOIN occupations vo ON vol.occupation_id = vo.id
+            LEFT JOIN seva_interests vs ON vol.seva_interest_id = vs.id
+            WHERE vol.mobile = ?
+            LIMIT 1
+        ");
+        $stmt->bind_param("s", $mobile);
+        $stmt->execute();
+        $vol_result = $stmt->get_result();
+        
+        if ($vol_result->num_rows === 0) {
+            json_response(['ok' => false, 'error' => 'Mobile number not found in any database'], 404);
+        }
+        
+        // Create visitor response from volunteer data
+        $volunteer = $vol_result->fetch_assoc();
+        $visitor = [
+            'id' => null, // No visitor record yet
+            'name' => $volunteer['name'],
+            'mobile' => $volunteer['mobile'],
+            'email' => $volunteer['email'],
+            'phone' => $volunteer['phone'],
+            'dob' => $volunteer['dob'],
+            'village_name' => $volunteer['village_name'],
+            'city_name' => $volunteer['city_name'],
+            'state_name' => $volunteer['state_name'],
+            'country_name' => $volunteer['country_name'],
+            'occupation_name' => $volunteer['occupation_name'],
+            'seva_name' => $volunteer['seva_name'],
+            'registered_at' => $volunteer['registered_at'],
+            'visits' => [], // No visits yet
+            'total_visits' => 0,
+            'is_volunteer_data' => true // Flag to indicate this is from volunteer table
+        ];
+        $stmt->close();
+        
+        json_response(['ok' => true, 'visitor' => $visitor]);
+        return;
     }
     
     $visitor = $result->fetch_assoc();

@@ -258,7 +258,7 @@ async function checkMobileExists(mobile) {
             if (data.found_in === 'visitors') {
                 statusDiv.innerHTML = '<span class="text-warning">⚠️ This mobile number already exists in visitor database. <button class="btn btn-sm btn-primary ms-2" onclick="openVisitorModal(\'' + mobile + '\')">Record New Visit</button></span>';
             } else if (data.found_in === 'volunteers') {
-                statusDiv.innerHTML = '<span class="text-info">ℹ️ This mobile number exists in volunteer database. You can still register as a new visitor if needed.</span>';
+                statusDiv.innerHTML = '<span class="text-info">ℹ️ This mobile number exists in volunteer database. <button class="btn btn-sm btn-primary ms-2" onclick="openVisitorModal(\'' + mobile + '\')">Record New Visit</button></span>';
             }
         } else {
             statusDiv.innerHTML = '<span class="text-success">✅ New mobile number - ready for registration</span>';
@@ -308,6 +308,14 @@ async function openVisitorModal(mobile) {
 }
 
 function populateVisitorModal(visitor) {
+    // Update modal title based on data source
+    const modalTitle = document.querySelector('#visitorModal .modal-title');
+    if (visitor.is_volunteer_data) {
+        modalTitle.textContent = 'Volunteer - Record New Visit';
+    } else {
+        modalTitle.textContent = 'Existing Visitor - Record New Visit';
+    }
+    
     // Show visitor details section
     document.getElementById('visitorDetails').style.display = 'block';
     
@@ -1088,7 +1096,13 @@ async function addCountry() {
     const data = await res.json();
     const msg = document.getElementById('msg');
     if (data.ok) {
-      msg.innerHTML = '<div class="alert alert-success">Saved! Volunteer ID: ' + data.id + '</div>';
+      const successMsg = data.message || ('Saved! Volunteer ID: ' + data.id);
+      let msgContent = '<div class="alert alert-success">' + successMsg;
+      if (data.visitor_id && data.visit_id) {
+        msgContent += '<br><small class="text-muted">✓ Visitor record created (ID: ' + data.visitor_id + ') ✓ Visit recorded (ID: ' + data.visit_id + ')</small>';
+      }
+      msgContent += '</div>';
+      msg.innerHTML = msgContent;
       e.target.reset();
       // Reload all dropdowns to ensure they're fresh
       loadVillages();
